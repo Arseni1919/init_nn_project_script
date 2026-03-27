@@ -1,4 +1,4 @@
-# Script for Initialization of a PyTorch Project
+# Script For An Initialization Of A PyTorch Project
 
 ```bash
 #!/bin/bash
