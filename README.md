@@ -9,7 +9,7 @@ files=(
     "nn_1_prepare_data.py" 
     "nn_2_build_model.py" 
     "nn_3_train.py" 
-    "nn_4_inference.py" 
+    "nn_4_evaluate.py" 
     "nn_5_deploy.py"
 )
 
