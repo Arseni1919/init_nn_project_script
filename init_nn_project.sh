@@ -77,14 +77,18 @@ import torchvision
 import torchvision.transforms as transforms
 from pathlib import Path
 
-def main():
-    Path("data").mkdir(exist_ok=True)
+def collect_data(data_dir):
+    Path(data_dir).mkdir(exist_ok=True)
     transform = transforms.Compose([transforms.ToTensor()])
-    torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-    torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    torchvision.datasets.CIFAR10(root=data_dir, train=True, download=True, transform=transform)
+    torchvision.datasets.CIFAR10(root=data_dir, train=False, download=True, transform=transform)
     print("✓ CIFAR-10 downloaded")
     print(f"Train size: 50000")
     print(f"Test size: 10000")
+
+def main():
+    data_dir = "data"
+    collect_data(data_dir)
 
 if __name__ == "__main__":
     main()
@@ -99,12 +103,12 @@ import torchvision.transforms as transforms
 from config import config
 
 class CIFAR10Dataset(Dataset):
-    def __init__(self, train=True):
+    def __init__(self, data_dir, train=True):
         self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
-        self.dataset = torchvision.datasets.CIFAR10(root='./data', train=train, download=False)
+        self.dataset = torchvision.datasets.CIFAR10(root=data_dir, train=train, download=False)
     def __len__(self):
         return len(self.dataset)
     def __getitem__(self, idx):
@@ -112,15 +116,17 @@ class CIFAR10Dataset(Dataset):
         image = self.transform(image)
         return image, label
 
-def get_dataloaders():
-    train_dataset = CIFAR10Dataset(train=True)
-    test_dataset = CIFAR10Dataset(train=False)
-    train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=config["batch_size"], shuffle=False)
+def get_dataloaders(data_dir, batch_size):
+    train_dataset = CIFAR10Dataset(data_dir, train=True)
+    test_dataset = CIFAR10Dataset(data_dir, train=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
     return train_loader, test_loader
 
 def main():
-    train_loader, test_loader = get_dataloaders()
+    data_dir = "data"
+    batch_size = config["batch_size"]
+    train_loader, test_loader = get_dataloaders(data_dir, batch_size)
     images, labels = next(iter(train_loader))
     print(f"✓ Dataset and DataLoaders ready")
     print(f"Train size: {len(train_loader.dataset)}")
@@ -196,25 +202,28 @@ def train_epoch(model, train_loader, criterion, optimizer, device):
         train_loss += loss.item()
     return train_loss / len(train_loader)
 
-def train():
+def train(data_dir, model_path, wandb_project):
     load_dotenv()
     set_seed(config["seed"])
     device = get_device()
-    wandb.init(project="nn-project", config=config)
-    train_loader, test_loader = get_dataloaders()
+    wandb.init(project=wandb_project, config=config)
+    train_loader, test_loader = get_dataloaders(data_dir, config["batch_size"])
     model = get_model().to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=config["lr"])
-    Path("models").mkdir(exist_ok=True)
+    Path(model_path).parent.mkdir(exist_ok=True)
     for epoch in range(config["epochs"]):
         avg_loss = train_epoch(model, train_loader, criterion, optimizer, device)
         wandb.log({"epoch": epoch, "loss": avg_loss})
         print(f"Epoch {epoch+1}/{config['epochs']}, Loss: {avg_loss:.4f}")
-    torch.save(model.state_dict(), "models/model.pth")
+    torch.save(model.state_dict(), model_path)
     wandb.finish()
     print("✓ Training complete")
 
 def main():
+    data_dir = "data"
+    model_path = "models/model.pth"
+    wandb_project = "nn-project"
     x = torch.randn(2, 3, 32, 32)
     model = get_model()
     out = model(x)
@@ -231,12 +240,13 @@ import torch
 from nn_1_prepare_data import get_dataloaders
 from nn_2_build_model import get_model
 from utils import get_device
+from config import config
 
-def evaluate():
+def evaluate(data_dir, model_path, batch_size):
     device = get_device()
-    _, test_loader = get_dataloaders()
+    _, test_loader = get_dataloaders(data_dir, batch_size)
     model = get_model().to(device)
-    model.load_state_dict(torch.load("models/model.pth", map_location=device))
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     correct = 0
     total = 0
@@ -252,6 +262,9 @@ def evaluate():
     return accuracy
 
 def main():
+    data_dir = "data"
+    model_path = "models/model.pth"
+    batch_size = config["batch_size"]
     device = get_device()
     model = get_model().to(device)
     x = torch.randn(2, 3, 32, 32).to(device)
@@ -275,23 +288,23 @@ from pathlib import Path
 from nn_2_build_model import get_model
 from utils import get_device
 
-def export_to_onnx():
+def export_to_onnx(model_path, onnx_path):
     device = get_device()
     model = get_model().to(device)
-    model.load_state_dict(torch.load("models/model.pth", map_location=device))
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
-    Path("models").mkdir(exist_ok=True)
+    Path(onnx_path).parent.mkdir(exist_ok=True)
     dummy_input = torch.randn(1, 3, 32, 32).to(device)
-    torch.onnx.export(model, dummy_input, "models/model.onnx",
+    torch.onnx.export(model, dummy_input, onnx_path,
                       input_names=['input'], output_names=['output'],
                       dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
-    onnx_model = onnx.load("models/model.onnx")
+    onnx_model = onnx.load(onnx_path)
     onnx.checker.check_model(onnx_model)
     print("✓ Model exported to ONNX")
-    print(f"Saved: models/model.onnx")
+    print(f"Saved: {onnx_path}")
 
-def predict(image):
-    ort_session = ort.InferenceSession("models/model.onnx")
+def predict(image, onnx_path):
+    ort_session = ort.InferenceSession(onnx_path)
     if isinstance(image, torch.Tensor):
         image = image.cpu().numpy()
     outputs = ort_session.run(None, {'input': image})
@@ -299,6 +312,8 @@ def predict(image):
     return pred
 
 def main():
+    model_path = "models/model.pth"
+    onnx_path = "models/model.onnx"
     x = torch.randn(1, 3, 32, 32)
     device = get_device()
     model = get_model().to(device)
