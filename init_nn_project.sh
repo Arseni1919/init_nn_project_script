@@ -34,6 +34,8 @@ dependencies = [
     "numpy>=1.24.0",
     "wandb>=0.15.0",
     "python-dotenv>=1.0.0",
+    "onnx>=1.14.0",
+    "onnxruntime>=1.15.0",
 ]
 EOF
 
@@ -252,33 +254,45 @@ echo "🚀 Creating nn_5_deploy.py..."
 cat > nn_5_deploy.py << 'EOF'
 import torch
 import numpy as np
+import onnx
+import onnxruntime as ort
+from pathlib import Path
 from nn_2_build_model import get_model
 from utils import get_device
 
-def predict(image):
+def export_to_onnx():
     device = get_device()
     model = get_model().to(device)
     model.load_state_dict(torch.load("models/model.pth", map_location=device))
     model.eval()
-    with torch.no_grad():
-        if isinstance(image, np.ndarray):
-            image = torch.from_numpy(image).float()
-        image = image.to(device)
-        output = model(image)
-        pred = torch.argmax(output, dim=1)
-    return pred.cpu().numpy()
+    Path("models").mkdir(exist_ok=True)
+    dummy_input = torch.randn(1, 3, 32, 32).to(device)
+    torch.onnx.export(model, dummy_input, "models/model.onnx",
+                      input_names=['input'], output_names=['output'],
+                      dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
+    onnx_model = onnx.load("models/model.onnx")
+    onnx.checker.check_model(onnx_model)
+    print("✓ Model exported to ONNX")
+    print(f"Saved: models/model.onnx")
+
+def predict(image):
+    ort_session = ort.InferenceSession("models/model.onnx")
+    if isinstance(image, torch.Tensor):
+        image = image.cpu().numpy()
+    outputs = ort_session.run(None, {'input': image})
+    pred = np.argmax(outputs[0], axis=1)
+    return pred
 
 def main():
+    x = torch.randn(1, 3, 32, 32)
     device = get_device()
     model = get_model().to(device)
-    x = torch.randn(1, 3, 32, 32).to(device)
     model.eval()
     with torch.no_grad():
-        out = model(x)
-        pred = torch.argmax(out, dim=1)
+        out = model(x.to(device))
     print(f"✓ Deployment script ready")
     print(f"Input: {x.shape}")
-    print(f"Prediction: {pred.item()}")
+    print(f"Output: {out.shape}")
 
 if __name__ == "__main__":
     main()

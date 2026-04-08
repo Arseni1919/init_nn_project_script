@@ -47,7 +47,7 @@ your-project/
 ├── nn_2_build_model.py    # Simple CNN
 ├── nn_3_train.py          # Training with W&B
 ├── nn_4_evaluate.py       # Test evaluation
-├── nn_5_deploy.py         # Inference
+├── nn_5_deploy.py         # ONNX export & inference
 ├── config.py              # Hyperparameters
 ├── utils.py               # Helpers
 ├── pyproject.toml         # Dependencies
