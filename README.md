@@ -43,7 +43,7 @@ your-project/
 ├── models/                 # Saved models
 ├── logs/                   # Logs
 ├── nn_0_collect_data.py   # Download CIFAR-10
-├── nn_1_prepare_data.py   # DataLoaders
+├── nn_1_prepare_data.py   # Dataset class & DataLoaders
 ├── nn_2_build_model.py    # Simple CNN
 ├── nn_3_train.py          # Training with W&B
 ├── nn_4_evaluate.py       # Test evaluation

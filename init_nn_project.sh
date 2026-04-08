@@ -93,26 +93,38 @@ EOF
 echo "🔄 Creating nn_1_prepare_data.py..."
 cat > nn_1_prepare_data.py << 'EOF'
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import Dataset, DataLoader
 import torchvision
 import torchvision.transforms as transforms
 from config import config
 
+class CIFAR10Dataset(Dataset):
+    def __init__(self, train=True):
+        self.transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+        self.dataset = torchvision.datasets.CIFAR10(root='./data', train=train, download=False)
+    def __len__(self):
+        return len(self.dataset)
+    def __getitem__(self, idx):
+        image, label = self.dataset[idx]
+        image = self.transform(image)
+        return image, label
+
 def get_dataloaders():
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-    ])
-    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=False, transform=transform)
-    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=False, transform=transform)
-    train_loader = DataLoader(trainset, batch_size=config["batch_size"], shuffle=True)
-    test_loader = DataLoader(testset, batch_size=config["batch_size"], shuffle=False)
+    train_dataset = CIFAR10Dataset(train=True)
+    test_dataset = CIFAR10Dataset(train=False)
+    train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=config["batch_size"], shuffle=False)
     return train_loader, test_loader
 
 def main():
     train_loader, test_loader = get_dataloaders()
     images, labels = next(iter(train_loader))
-    print(f"✓ Dataloaders ready")
+    print(f"✓ Dataset and DataLoaders ready")
+    print(f"Train size: {len(train_loader.dataset)}")
+    print(f"Test size: {len(test_loader.dataset)}")
     print(f"Batch shape: {images.shape}")
     print(f"Labels shape: {labels.shape}")
 
@@ -171,6 +183,19 @@ from nn_2_build_model import get_model
 from utils import set_seed, get_device
 from config import config
 
+def train_epoch(model, train_loader, criterion, optimizer, device):
+    model.train()
+    train_loss = 0
+    for images, labels in train_loader:
+        images, labels = images.to(device), labels.to(device)
+        optimizer.zero_grad()
+        outputs = model(images)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+        train_loss += loss.item()
+    return train_loss / len(train_loader)
+
 def train():
     load_dotenv()
     set_seed(config["seed"])
@@ -182,17 +207,7 @@ def train():
     optimizer = optim.Adam(model.parameters(), lr=config["lr"])
     Path("models").mkdir(exist_ok=True)
     for epoch in range(config["epochs"]):
-        model.train()
-        train_loss = 0
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.item()
-        avg_loss = train_loss / len(train_loader)
+        avg_loss = train_epoch(model, train_loader, criterion, optimizer, device)
         wandb.log({"epoch": epoch, "loss": avg_loss})
         print(f"Epoch {epoch+1}/{config['epochs']}, Loss: {avg_loss:.4f}")
     torch.save(model.state_dict(), "models/model.pth")
