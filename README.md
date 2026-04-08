@@ -1,5 +1,15 @@
 # Script For An Initialization Of A PyTorch Project
 
+## Quick Start
+
+Run this command in your project directory to initialize PyTorch project files:
+
+```bash
+bash <(curl -s https://raw.githubusercontent.com/Arseni1919/init_nn_project_script/main/init_nn_project.sh)
+```
+
+## Script Content
+
 ```bash
 #!/bin/bash
 
